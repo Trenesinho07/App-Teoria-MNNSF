@@ -1,0 +1,21 @@
+MNSSF TRAINER — VERSIÓN MODULAR ADAPTATIVA
+
+MEJORAS:
+- HTML, CSS, JavaScript y preguntas separados.
+- Carga bajo demanda: al iniciar solo se descarga el índice; cada tema JSON se solicita al seleccionarlo.
+- Caché offline progresiva: los temas visitados quedan disponibles offline después de descargarse una vez.
+- Repetición espaciada: al corregir una pregunta puedes programarla como Otra vez (10 min), Difícil (1 día), Bien (3 días) o Fácil (7 días). Los intervalos posteriores se adaptan al historial.
+- Repaso inteligente: prioriza tarjetas vencidas; si no hay, ofrece fallos y dudas.
+- Conserva las funciones de práctica, simulacro, banco, resumen y exportación de progreso.
+
+INSTALACIÓN:
+1. Descomprime la carpeta.
+2. Súbela completa a GitHub Pages o sírvela desde localhost.
+3. Abre index.html desde esa dirección (no file://).
+4. Visita una vez cada tema que quieras tener disponible offline. La caché es progresiva.
+
+NOTAS:
+- La primera visita descarga solo manifest.json y los recursos básicos.
+- Los JSON se descargan al abrir un tema o comenzar un simulacro que los requiera.
+- El progreso se guarda en localStorage de este navegador. Usa Exportar copia de progreso regularmente.
+- La puntuación y las reglas de corrección del simulacro original se mantienen.

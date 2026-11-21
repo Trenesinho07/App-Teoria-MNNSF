@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="theme-color" content="#0f172a">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MNSSF Trainer · Entrenador Teórico FEM & CFD (UVa)</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.webmanifest">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-logo">MN</div>
+      <div>
+        <h1>MNSSF Trainer · FEM & CFD</h1>
+        <p>120 preguntas verificadas · +0,05 / -0,05 · 100% offline</p>
+      </div>
+    </div>
+    <nav>
+      <button class="tab-btn active" onclick="switchTab('config')">🎯 Configurar</button>
+      <button class="tab-btn" onclick="switchTab('practice')">⚡ Práctica</button>
+      <button class="tab-btn" onclick="switchTab('exam')">📝 Simulacro</button>
+      <button class="tab-btn" onclick="switchTab('bank')">📚 Banco (120)</button>
+      <button class="tab-btn" onclick="switchTab('cheatsheet')">🧠 Repaso Exprés</button>
+      <button class="tab-btn" onclick="switchTab('data')">⚙️ Datos</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ===================== TAB 1: CONFIGURADOR ===================== -->
+  <section id="view-config" class="view active">
+    <div class="stats-grid" id="global-stats"></div>
+
+    <div class="card">
+      <div class="card-title">🎯 Configurador de Sesión por Temas</div>
+      <p class="subtitle">Selecciona un preset rápido o haz clic en los temas concretos que quieras entrenar. Todo tu progreso se guarda automáticamente en el navegador.</p>
+
+      <div class="presets">
+        <button class="btn btn-sm btn-primary" onclick="applyPreset('all')">Todo el temario (120)</button>
+        <button class="btn btn-sm btn-fem" onclick="applyPreset('fem')">Solo FEM (40)</button>
+        <button class="btn btn-sm btn-cfd" onclick="applyPreset('cfd')">Solo CFD (80)</button>
+        <button class="btn btn-sm btn-warn" onclick="applyPreset('examOnly')">📄 Solo Modelo Examen (40)</button>
+        <button class="btn btn-sm btn-err" onclick="applyPreset('weak')">🔥 Solo Fallos y Dudas (<span id="weak-count">0</span>)</button>
+        <button class="btn btn-sm btn-primary" onclick="startDueReview()">🧠 Repaso inteligente (<span id="due-count">0</span>)</button>
+        <button class="btn btn-sm" onclick="applyPreset('none')">Limpiar</button>
+      </div>
+
+      <div class="block-header">
+        <div><span class="block-tag tag-fem">BLOQUE SÓLIDOS · FEM (MEF)</span></div>
+        <button class="btn btn-sm" onclick="toggleBlock('FEM')">Alternar todo FEM</button>
+      </div>
+      <div class="topic-grid" id="topics-fem"></div>
+
+      <div class="block-header" style="margin-top:20px;">
+        <div><span class="block-tag tag-cfd">BLOQUE FLUIDOS · CFD (MVF)</span></div>
+        <button class="btn btn-sm" onclick="toggleBlock('CFD')">Alternar todo CFD</button>
+      </div>
+      <div class="topic-grid" id="topics-cfd"></div>
+
+      <div class="launch-bar">
+        <div class="controls-inline">
+          <label>Preguntas:
+            <select id="cfg-limit">
+              <option value="all">Todas las disponibles</option>
+              <option value="10">10 aleatorias</option>
+              <option value="20" selected>20 aleatorias</option>
+              <option value="40">40 aleatorias</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="cfg-only-exam"> Solo preguntas del Modelo Oficial
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="cfg-shuffle" checked> Mezclar orden
+          </label>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <button class="btn btn-primary btn-lg" onclick="startPracticeFromConfig()">⚡ Empezar Práctica (<span id="sel-count">120</span>)</button>
+          <button class="btn btn-warn btn-lg" onclick="startExamFromConfig()">📝 Simulacro Examen</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TAB 2: PRÁCTICA ACTIVA ===================== -->
+  <section id="view-practice" class="view">
+    <div id="practice-empty" class="card" style="display:none; text-align:center; padding:36px;">
+      <p style="font-size:16px; margin-bottom:14px;">No hay ninguna sesión activa con esos filtros.</p>
+      <button class="btn btn-primary" onclick="switchTab('config')">Volver al Configurador</button>
+    </div>
+
+    <div id="practice-box" class="card">
+      <div class="q-meta">
+        <div class="q-badges" id="p-badges"></div>
+        <div style="font-size:13px; color:var(--muted);">
+          Pregunta <strong id="p-idx">1</strong> / <span id="p-total">20</span> ·
+          Aciertos: <strong style="color:var(--ok)" id="p-ok">0</strong> ·
+          Fallos: <strong style="color:var(--err)" id="p-err">0</strong>
+        </div>
+      </div>
+      <div class="bar" style="margin-bottom:14px;"><div class="bar-fill" id="p-progress" style="width:0%; background:var(--primary);"></div></div>
+
+      <div class="q-text" id="p-question"></div>
+      <div class="reflection-hint"><strong>Recuperación activa:</strong> antes de elegir, intenta justificar la afirmación sin mirar los apuntes. Identifica qué principio o condición la hace verdadera o falsa.</div>
+
+      <div class="vf-grid">
+        <button class="vf-btn v-btn" id="btn-v" onclick="answerPractice(true)">✔ VERDADERO <span class="kbd">V</span></button>
+        <button class="vf-btn f-btn" id="btn-f" onclick="answerPractice(false)">✖ FALSO <span class="kbd">F</span></button>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
+        <button class="btn btn-sm" id="btn-doubt" onclick="toggleCurrentDoubt()">🚩 Marcar como dudosa <span class="kbd">D</span></button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-sm" onclick="prevPractice()">← Anterior</button>
+          <button class="btn btn-primary" id="btn-next" onclick="nextPractice()">Siguiente → <span class="kbd">Enter</span></button>
+        </div>
+      </div>
+
+      <div id="p-feedback" class="feedback" style="display:none;"></div>
+    </div>
+
+    <div id="practice-summary" class="card" style="display:none;"></div>
+  </section>
+
+  <!-- ===================== TAB 3: SIMULACRO ===================== -->
+  <section id="view-exam" class="view">
+    <div id="exam-setup" class="card">
+      <div class="card-title">📝 Simulacro de Examen Oficial</div>
+      <p class="subtitle">Reglas exactas de MNSSF: cada acierto suma <strong>+0,05 pts</strong> y cada fallo resta <strong>-0,05 pts</strong> (equivalente a +1 / -1 sobre 40 preguntas = 2,00 pts). No verás la corrección hasta entregar.</p>
+      <div class="controls-inline" style="margin-bottom:16px;">
+        <label>Origen:
+          <select id="exam-source">
+            <option value="all">Todo el temario (balanceado FEM + CFD)</option>
+            <option value="official">Las 40 del Modelo Oficial exacto</option>
+            <option value="selected">Solo los temas marcados en Configurar</option>
+            <option value="fem">Solo bloque FEM</option>
+            <option value="cfd">Solo bloque CFD</option>
+          </select>
+        </label>
+        <label>Nº preguntas:
+          <input type="number" id="exam-num" value="40" min="5" max="120" style="width:80px;">
+        </label>
+        <label>Minutos:
+          <input type="number" id="exam-mins" value="25" min="5" max="90" style="width:75px;">
+        </label>
+      </div>
+      <button class="btn btn-warn btn-lg" onclick="launchExam()">🚀 Comenzar Simulacro</button>
+    </div>
+
+    <div id="exam-active" class="card" style="display:none;">
+      <div class="q-meta">
+        <div class="q-badges" id="e-badges"></div>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <span style="font-size:13px; color:var(--muted);">Respondidas: <strong id="e-answered">0</strong>/<span id="e-total">40</span></span>
+          <span class="timer" id="e-timer">25:00</span>
+        </div>
+      </div>
+
+      <div class="exam-nav" id="e-nav"></div>
+      <div class="q-text" id="e-question"></div>
+
+      <div class="vf-grid">
+        <button class="vf-btn v-btn" id="e-btn-v" onclick="markExam(true)">✔ VERDADERO (Marcar casilla)</button>
+        <button class="vf-btn f-btn" id="e-btn-f" onclick="markExam(false)">✖ FALSO (Dejar en blanco)</button>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-sm" onclick="moveExam(-1)">← Anterior</button>
+          <button class="btn btn-sm" onclick="moveExam(1)">Siguiente →</button>
+        </div>
+        <button class="btn btn-ok" onclick="finishExam()">✅ Entregar y Corregir</button>
+      </div>
+    </div>
+
+    <div id="exam-result" class="card" style="display:none;"></div>
+  </section>
+
+  <!-- ===================== TAB 4: BANCO DE PREGUNTAS ===================== -->
+  <section id="view-bank" class="view">
+    <div class="card">
+      <div class="card-title">📚 Explorador del Banco de Preguntas</div>
+      <p class="subtitle">Filtra por bloque, tema, palabra clave o estado (falladas/dudosas). Haz clic en cualquier pregunta para ver su respuesta y las 3 claves teóricas, o lanza una práctica directa con tu filtro.</p>
+
+      <div class="filter-bar">
+        <input type="text" id="b-search" placeholder="Buscar concepto (ej. Peclet, Jacobiano, SIMPLE, Robin, pandeo...)" oninput="renderBank()">
+        <select id="b-block" onchange="renderBank()">
+          <option value="ALL">Bloque: Todos</option>
+          <option value="FEM">Solo FEM</option>
+          <option value="CFD">Solo CFD</option>
+        </select>
+        <select id="b-topic" onchange="renderBank()">
+          <option value="ALL">Tema: Todos</option>
+        </select>
+        <select id="b-status" onchange="renderBank()">
+          <option value="ALL">Estado: Todos</option>
+          <option value="WRONG">❌ Falladas</option>
+          <option value="DOUBT">🚩 Dudosas</option>
+          <option value="OK">✔ Dominadas</option>
+          <option value="NEW">🆕 Sin responder</option>
+          <option value="EXAM">📄 Modelo Examen</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="practiceFilteredBank()">⚡ Practicar filtro (<span id="b-count">120</span>)</button>
+      </div>
+
+      <div id="bank-list"></div>
+    </div>
+  </section>
+
+  <!-- ===================== TAB 5: REPASO EXPRÉS ===================== -->
+  <section id="view-cheatsheet" class="view">
+    <div class="card">
+      <div class="card-title">🔥 Top 10 Trampas Clásicas del Examen</div>
+      <table>
+        <thead><tr><th>Trampa del enunciado</th><th>Realidad que debes marcar</th></tr></thead>
+        <tbody>
+          <tr><td>"Euler implícito usa la semisuma de los dos extremos"</td><td><strong>FALSO</strong>: esa es la <em>Regla del trapecio</em> (Crank-Nicolson).</td></tr>
+          <tr><td>"Simetría iguala flujo saliente de un contorno al entrante del opuesto"</td><td><strong>FALSO</strong>: eso es <em>Periodicidad</em>. Simetría = v_n = 0 y ∂φ/∂n = 0.</td></tr>
+          <tr><td>"En MEF, ε y σ se tratan como tensores de orden 2"</td><td><strong>FALSO</strong>: en formulación matricial MEF se tratan como <em>vectores</em> (Voigt) y D como matriz.</td></tr>
+          <tr><td>"Un jacobiano próximo a 1 indica elevada distorsión"</td><td><strong>FALSO</strong>: J ≈ 1 indica elemento <em>poco distorsionado</em> (recomendado J > 0,5).</td></tr>
+          <tr><td>"La suma de las funciones de forma es mayor que 1"</td><td><strong>FALSO</strong>: siempre es <em>exactamente igual a 1</em> (∑ N_k = 1).</td></tr>
+          <tr><td>"Malla triangular no estructurada da mayor precisión en MVF"</td><td><strong>FALSO</strong>: la mayor precisión la da la <em>cartesiana estructurada</em> ideal.</td></tr>
+          <tr><td>"QUICK no tiene en cuenta la dirección del flujo"</td><td><strong>FALSO</strong>: QUICK sí la tiene en cuenta; su fallo es que <em>no está acotado</em> (oscila).</td></tr>
+          <tr><td>"Falsa difusión de Upwind no se corrige refinando malla"</td><td><strong>FALSO</strong>: es proporcional a Δx, así que <em>sí disminuye</em> al refinar.</td></tr>
+          <tr><td>"Análisis de sensibilidad en updating sirve para ajustar la malla"</td><td><strong>FALSO</strong>: sirve para elegir parámetros influyentes (la malla se valida antes).</td></tr>
+          <tr><td>"Convergencia de malla garantiza exactitud del resultado"</td><td><strong>FALSO</strong>: solo acota el <em>error tipo A</em> (numérico), no el <em>tipo B</em> (simplificaciones).</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📘 Bloque FEM · Resumen Quirúrgico (T1–T4)</div>
+      <table>
+        <thead><tr><th>Tipo de Análisis</th><th>Ecuación</th><th>Propiedades</th><th>Clave de examen</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Estático lineal</strong></td><td>K·q = f</td><td>K</td><td>Único donde MEF puede ser exacto e independiente de malla.</td></tr>
+          <tr><td><strong>Inestabilidad (Pandeo)</strong></td><td>(K + λ_cr·K_G)Φ = 0</td><td>K, K_G (cargas)</td><td>λ=0 indica sólido rígido. MEF no distingue pandeo/vuelco/abolladura.</td></tr>
+          <tr><td><strong>Modal</strong></td><td>(K - ω²·M)Φ = 0</td><td>K, M</td><td>Independiente de cargas. Más M o menos K ⇒ ω más baja.</td></tr>
+          <tr><td><strong>Dinámico</strong></td><td>M·q̈ + C·q̇ + K·q = f(t)</td><td>K, M, C</td><td>Superposición modal (lineal) o integración directa (Δt crítico).</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Plano de Simetría (solo válido en estático)</th><th>Desplazamientos permitidos</th><th>Giros permitidos</th><th>Cargas y rigidez en el plano</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Condición Simétrica</strong></td><td>Paralelos al plano</td><td>Eje perpendicular al plano</td><td>Dividir a la mitad (÷ 2)</td></tr>
+          <tr><td><strong>Condición Antisimétrica</strong></td><td>Perpendiculares al plano</td><td>Eje paralelo al plano</td><td>Dividir a la mitad (÷ 2)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🌊 Bloque CFD · Resumen Quirúrgico (L1–L8)</div>
+      <table>
+        <thead><tr><th>Esquema</th><th>Orden</th><th>Dirección flujo</th><th>Acotado</th><th>Defecto / Nota clave</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Diferencias Centradas</strong></td><td>2º</td><td>No</td><td>Solo si Pe_Δ &lt; 2</td><td>Dispersión numérica (oscila por 3ª derivada si Pe &gt; 2).</td></tr>
+          <tr><td><strong>Upwind</strong></td><td>1º</td><td>Sí</td><td>Sí (siempre)</td><td>Falsa difusión (2ª derivada ∝ Δx). Muy robusto.</td></tr>
+          <tr><td><strong>Híbrido</strong></td><td>1º</td><td>Sí</td><td>Sí</td><td>Usa Centradas si Pe &lt; 2 y Upwind si Pe ≥ 2.</td></tr>
+          <tr><td><strong>QUICK</strong></td><td>3º</td><td>Sí (2 arriba, 1 abajo)</td><td>No siempre</td><td>Oscilaciones / sobreimpulsos no físicos; necesita limitador (TVD).</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Condición Física</th><th>Tipo Matemático</th><th>Qué impone</th></tr></thead>
+        <tbody>
+          <tr><td>Entrada (u, T, k, ε) / Pared sin deslizamiento / Presión impuesta</td><td><strong>Dirichlet</strong> (1ª especie)</td><td>Valor directo (S_p = -10¹⁰)</td></tr>
+          <tr><td>Salida desarrollada / Pared adiabática / Simetría</td><td><strong>Neumann homogéneo</strong> (2ª)</td><td>Flujo o gradiente normal nulo (∂φ/∂n = 0)</td></tr>
+          <tr><td>Pared con película convectiva (coef. h)</td><td><strong>Robin</strong> (3ª / mixta)</td><td>h→∞ da Dirichlet; h→0 da Neumann homogéneo</td></tr>
+          <tr><td>Periodicidad (turbomáquinas)</td><td><em>Excepción</em></td><td>Acopla flujo saliente de un contorno con entrante del opuesto</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Turbulencia</th><th>Qué resuelve</th><th>Coste / Uso</th><th>Pared (y+)</th></tr></thead>
+        <tbody>
+          <tr><td><strong>DNS</strong></td><td>Todas las escalas (sin modelo)</td><td>Extremo · Solo Re bajos / referencia</td><td>—</td></tr>
+          <tr><td><strong>LES</strong></td><td>Grandes escalas + filtro subescala</td><td>Alto · La malla puede ser el filtro</td><td>—</td></tr>
+          <tr><td><strong>RANS</strong> (k-ε, k-ω, SA)</td><td>Promediado temporal (tensor Reynolds)</td><td>Bajo · Estándar industrial</td><td>Estándar: 30&lt;y+&lt;100 | Bajo Re: y+≈1</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== TAB 6: DATOS / JSON ===================== -->
+  <section id="view-data" class="view">
+    <div class="card">
+      <div class="card-title">⚙️ Gestión de Progreso y Banco JSON</div>
+      <p class="subtitle">Puedes añadir preguntas propias en formato JSON o reiniciar tus estadísticas locales.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px;">
+        <button class="btn btn-primary" onclick="exportProgress()">💾 Descargar copia de progreso (.json)</button>
+        <button class="btn btn-err" onclick="resetProgress()">🗑️ Reiniciar estadísticas y fallos</button>
+      </div>
+      <label style="display:block; font-weight:700; margin-bottom:6px;">Añadir preguntas extra (JSON Array):</label>
+      <textarea id="json-input" rows="5" style="width:100%; margin-bottom:10px;" placeholder='[{"id":"EXTRA-1","block":"CFD","topic":"L8","topicName":"L8: Buenas Prácticas en CFD","isExam":false,"q":"Enunciado...","a":true,"trap":"...","concept":"...","anchor":"..."}]'></textarea>
+      <button class="btn btn-ok" onclick="importExtraJSON()">➕ Importar preguntas al banco</button>
+      <div id="import-msg" style="margin-top:10px; font-size:13px;"></div>
+    </div>
+  </section>
+</main>
+
+<script src="app.js" defer></script>
+</body>
+</html>
