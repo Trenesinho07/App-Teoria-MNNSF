@@ -16,14 +16,14 @@
       <div class="brand-logo">MN</div>
       <div>
         <h1>MNSSF Trainer · FEM & CFD</h1>
-        <p>120 preguntas verificadas · +0,05 / -0,05 · 100% offline</p>
+        <p>360 preguntas verificadas · +0,05 / -0,05 · 100% offline</p>
       </div>
     </div>
     <nav>
       <button class="tab-btn active" onclick="switchTab('config')">🎯 Configurar</button>
       <button class="tab-btn" onclick="switchTab('practice')">⚡ Práctica</button>
       <button class="tab-btn" onclick="switchTab('exam')">📝 Simulacro</button>
-      <button class="tab-btn" onclick="switchTab('bank')">📚 Banco (120)</button>
+      <button class="tab-btn" onclick="switchTab('bank')">📚 Banco (360)</button>
       <button class="tab-btn" onclick="switchTab('cheatsheet')">🧠 Repaso Exprés</button>
       <button class="tab-btn" onclick="switchTab('data')">⚙️ Datos</button>
     </nav>
@@ -40,9 +40,9 @@
       <p class="subtitle">Selecciona un preset rápido o haz clic en los temas concretos que quieras entrenar. Todo tu progreso se guarda automáticamente en el navegador.</p>
 
       <div class="presets">
-        <button class="btn btn-sm btn-primary" onclick="applyPreset('all')">Todo el temario (120)</button>
-        <button class="btn btn-sm btn-fem" onclick="applyPreset('fem')">Solo FEM (40)</button>
-        <button class="btn btn-sm btn-cfd" onclick="applyPreset('cfd')">Solo CFD (80)</button>
+        <button class="btn btn-sm btn-primary" onclick="applyPreset('all')">Todo el temario (360)</button>
+        <button class="btn btn-sm btn-fem" onclick="applyPreset('fem')">Solo FEM (120)</button>
+        <button class="btn btn-sm btn-cfd" onclick="applyPreset('cfd')">Solo CFD (240)</button>
         <button class="btn btn-sm btn-warn" onclick="applyPreset('examOnly')">📄 Solo Modelo Examen (40)</button>
         <button class="btn btn-sm btn-err" onclick="applyPreset('weak')">🔥 Solo Fallos y Dudas (<span id="weak-count">0</span>)</button>
         <button class="btn btn-sm btn-primary" onclick="startDueReview()">🧠 Repaso inteligente (<span id="due-count">0</span>)</button>
@@ -68,6 +68,7 @@
               <option value="all">Todas las disponibles</option>
               <option value="10">10 aleatorias</option>
               <option value="20" selected>20 aleatorias</option>
+              <option value="30">30 aleatorias</option>
               <option value="40">40 aleatorias</option>
             </select>
           </label>
@@ -79,7 +80,7 @@
           </label>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
-          <button class="btn btn-primary btn-lg" onclick="startPracticeFromConfig()">⚡ Empezar Práctica (<span id="sel-count">120</span>)</button>
+          <button class="btn btn-primary btn-lg" onclick="startPracticeFromConfig()">⚡ Empezar Práctica (<span id="sel-count">360</span>)</button>
           <button class="btn btn-warn btn-lg" onclick="startExamFromConfig()">📝 Simulacro Examen</button>
         </div>
       </div>
@@ -142,7 +143,7 @@
           </select>
         </label>
         <label>Nº preguntas:
-          <input type="number" id="exam-num" value="40" min="5" max="120" style="width:80px;">
+          <input type="number" id="exam-num" value="40" min="5" max="360" style="width:80px;">
         </label>
         <label>Minutos:
           <input type="number" id="exam-mins" value="25" min="5" max="90" style="width:75px;">
@@ -204,7 +205,7 @@
           <option value="NEW">🆕 Sin responder</option>
           <option value="EXAM">📄 Modelo Examen</option>
         </select>
-        <button class="btn btn-primary btn-sm" onclick="practiceFilteredBank()">⚡ Practicar filtro (<span id="b-count">120</span>)</button>
+        <button class="btn btn-primary btn-sm" onclick="practiceFilteredBank()">⚡ Practicar filtro (<span id="b-count">360</span>)</button>
       </div>
 
       <div id="bank-list"></div>

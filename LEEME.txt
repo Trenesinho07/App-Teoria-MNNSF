@@ -19,3 +19,9 @@ NOTAS:
 - Los JSON se descargan al abrir un tema o comenzar un simulacro que los requiera.
 - El progreso se guarda en localStorage de este navegador. Usa Exportar copia de progreso regularmente.
 - La puntuación y las reglas de corrección del simulacro original se mantienen.
+
+
+ACTUALIZACIÓN BANCO 360 PREGUNTAS (v3):
+- Ampliado a 30 preguntas verificadas por cada uno de los 12 temas (120 FEM + 240 CFD = 360 preguntas).
+- Conserva los IDs originales (01–10) para no perder tu progreso guardado en localStorage.
+- Caché del Service Worker actualizada a mnssf-trainer-v3 para refrescar automáticamente los JSON en GitHub Pages.

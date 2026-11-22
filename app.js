@@ -86,7 +86,7 @@ function renderConfig() {
   const mastered = entries.filter(x => x.lastCorrect === true).length;
   const wrong = entries.filter(x => x.lastCorrect === false).length;
   const doubts = Object.keys(state.doubts || {}).length;
-  const weakCount = Object.keys(state.doubts || {}).length + entries.filter(x => x.lastCorrect === false).length;
+  const weakIds = new Set([...Object.keys(state.doubts || {}), ...Object.entries(state.stats || {}).filter(([,v]) => v.lastCorrect === false).map(([k]) => k)]); const weakCount = weakIds.size;
   document.getElementById("weak-count").textContent = weakCount;
   const dueCount = Object.values(state.schedule || {}).filter(x => !x.due || x.due <= Date.now()).length;
   const dueBadge = document.getElementById("due-count"); if (dueBadge) dueBadge.textContent = dueCount;
