@@ -1,84 +1,84 @@
 [
   {
     "id": "T1",
-    "count": 10,
+    "count": 30,
     "block": "FEM",
     "name": "T1: Introducción y CG",
     "examCount": 6
   },
   {
     "id": "T2",
-    "count": 10,
+    "count": 30,
     "block": "FEM",
     "name": "T2: El MEF y Simetrías",
     "examCount": 7
   },
   {
     "id": "T3",
-    "count": 10,
+    "count": 30,
     "block": "FEM",
     "name": "T3: Tipos de Análisis",
     "examCount": 5
   },
   {
     "id": "T4",
-    "count": 10,
+    "count": 30,
     "block": "FEM",
     "name": "T4: Model Updating",
     "examCount": 2
   },
   {
     "id": "L1",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L1: Conceptos Fundamentales",
     "examCount": 4
   },
   {
     "id": "L2",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L2: Mallado e Implementación MVF",
     "examCount": 2
   },
   {
     "id": "L3",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L3: Esquemas de Discretización",
     "examCount": 4
   },
   {
     "id": "L4",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L4: Acoplamiento Presión-Velocidad",
     "examCount": 2
   },
   {
     "id": "L5",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L5: Condiciones de Contorno",
     "examCount": 2
   },
   {
     "id": "L6",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L6: Solvers y Flujo Transitorio",
     "examCount": 2
   },
   {
     "id": "L7",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L7: Modelado de la Turbulencia",
     "examCount": 3
   },
   {
     "id": "L8",
-    "count": 10,
+    "count": 30,
     "block": "CFD",
     "name": "L8: Buenas Prácticas en CFD",
     "examCount": 1
