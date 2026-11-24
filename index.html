@@ -20,12 +20,13 @@
       </div>
     </div>
     <nav>
-      <button class="tab-btn active" onclick="switchTab('config')">🎯 Configurar</button>
-      <button class="tab-btn" onclick="switchTab('practice')">⚡ Práctica</button>
-      <button class="tab-btn" onclick="switchTab('exam')">📝 Simulacro</button>
-      <button class="tab-btn" onclick="switchTab('bank')">📚 Banco (360)</button>
-      <button class="tab-btn" onclick="switchTab('cheatsheet')">🧠 Repaso Exprés</button>
-      <button class="tab-btn" onclick="switchTab('data')">⚙️ Datos</button>
+      <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">🎯 Configurar</button>
+      <button class="tab-btn" data-tab="practice" onclick="switchTab('practice')">⚡ Práctica</button>
+      <button class="tab-btn" data-tab="exam" onclick="switchTab('exam')">📝 Simulacro</button>
+      <button class="tab-btn" data-tab="randomexam" onclick="switchTab('randomexam')">📄 Examen Aleatorio</button>
+      <button class="tab-btn" data-tab="bank" onclick="switchTab('bank')">📚 Banco (360)</button>
+      <button class="tab-btn" data-tab="cheatsheet" onclick="switchTab('cheatsheet')">🧠 Repaso Exprés</button>
+      <button class="tab-btn" data-tab="data" onclick="switchTab('data')">⚙️ Datos</button>
     </nav>
   </div>
 </header>
@@ -81,7 +82,8 @@
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
           <button class="btn btn-primary btn-lg" onclick="startPracticeFromConfig()">⚡ Empezar Práctica (<span id="sel-count">360</span>)</button>
-          <button class="btn btn-warn btn-lg" onclick="startExamFromConfig()">📝 Simulacro Examen</button>
+          <button class="btn btn-warn btn-lg" onclick="startExamFromConfig()">📝 Simulacro</button>
+          <button class="btn btn-cfd btn-lg" onclick="openRandomExamFromConfig()">📄 Examen Aleatorio</button>
         </div>
       </div>
     </div>
@@ -136,6 +138,7 @@
         <label>Origen:
           <select id="exam-source">
             <option value="all">Todo el temario (balanceado FEM + CFD)</option>
+            <option value="nonOfficial">Resto de preguntas (320, sin el Modelo Oficial)</option>
             <option value="official">Las 40 del Modelo Oficial exacto</option>
             <option value="selected">Solo los temas marcados en Configurar</option>
             <option value="fem">Solo bloque FEM</option>
@@ -179,6 +182,124 @@
     </div>
 
     <div id="exam-result" class="card" style="display:none;"></div>
+  </section>
+
+
+  <!-- ===================== TAB 3B: EXAMEN ALEATORIO (HOJA COMPLETA) ===================== -->
+  <section id="view-randomexam" class="view">
+    <div id="re-setup" class="card">
+      <div class="card-title">📄 Generador de Examen Aleatorio (Formato Hoja Oficial)</div>
+      <p class="subtitle">Genera una hoja de examen completa y aleatoria con <strong>X preguntas</strong> para practicar el resto del banco (o todo el temario) exactamente como en el papel real: <strong>marca la casilla ☑ si es Verdadera</strong> o <strong>déjala en blanco ☐ si es Falsa</strong>. Cada acierto suma y cada fallo resta lo mismo.</p>
+
+      <div class="re-config-grid">
+        <div class="re-field">
+          <label for="re-source">Banco de origen</label>
+          <select id="re-source" onchange="updateRandomExamAvailability()">
+            <option value="nonOfficial" selected>Resto del banco (320 preguntas, sin las 40 del Modelo Oficial)</option>
+            <option value="all">Todo el temario completo (360 preguntas)</option>
+            <option value="unseen">Priorizar preguntas nuevas / sin responder</option>
+            <option value="selected">Solo los temas marcados en Configurar</option>
+            <option value="fem">Solo bloque FEM (120 preguntas)</option>
+            <option value="cfd">Solo bloque CFD (240 preguntas)</option>
+            <option value="weak">Solo fallos y dudas pendientes</option>
+          </select>
+        </div>
+
+        <div class="re-field">
+          <label for="re-balance">Reparto de preguntas</label>
+          <select id="re-balance">
+            <option value="balanced" selected>Balanceado 50% FEM / 50% CFD (como el oficial)</option>
+            <option value="pure">Aleatorio puro (proporcional al banco)</option>
+          </select>
+        </div>
+
+        <div class="re-field">
+          <label for="re-num">Nº de preguntas (X)</label>
+          <div class="re-num-row">
+            <input type="number" id="re-num" value="40" min="5" max="360" style="width:90px;" oninput="syncRandomExamMeta()">
+            <button type="button" class="btn btn-sm" onclick="setReNum(20)">20</button>
+            <button type="button" class="btn btn-sm" onclick="setReNum(40)">40</button>
+            <button type="button" class="btn btn-sm" onclick="setReNum(60)">60</button>
+            <button type="button" class="btn btn-sm" onclick="setReNum(80)">80</button>
+          </div>
+        </div>
+
+        <div class="re-field">
+          <label for="re-mins">Tiempo en minutos (0 = libre)</label>
+          <div class="re-num-row">
+            <input type="number" id="re-mins" value="25" min="0" max="180" style="width:90px;">
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('re-mins').value=15">15m</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('re-mins').value=25">25m</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('re-mins').value=0">Libre</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="re-options-row">
+        <label class="re-check">
+          <input type="checkbox" id="re-no-repeat" checked onchange="updateRandomExamAvailability()">
+          <span>Sin repetir preguntas ya salidas en esta vuelta</span>
+        </label>
+        <label class="re-check">
+          <input type="checkbox" id="re-blind" checked>
+          <span>Ocultar tema de cada pregunta hasta corregir (modo real)</span>
+        </label>
+        <label class="re-check">
+          <input type="checkbox" id="re-two-col" checked>
+          <span>Diseño en 2 columnas en pantalla grande (tipo folio)</span>
+        </label>
+      </div>
+
+      <div class="re-cycle-bar">
+        <div id="re-avail-info" style="font-size:13px; color:var(--muted);">Cargando disponibilidad…</div>
+        <button type="button" class="btn btn-sm" onclick="resetRandomExamCycle()">🔄 Reiniciar vuelta sin repetición</button>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:16px;">
+        <button class="btn btn-primary btn-lg" onclick="launchRandomExam()">🎲 Generar Examen Aleatorio</button>
+      </div>
+    </div>
+
+    <!-- HOJA DE EXAMEN ACTIVA / CORREGIDA -->
+    <div id="re-result" class="card" style="display:none;"></div>
+
+    <div id="re-sheet-card" class="card" style="display:none;">
+      <div class="re-sticky-bar no-print" id="re-sticky-bar">
+        <div class="re-sticky-stats">
+          <span class="block-tag tag-ok">☑ Verdadero: <strong id="re-cnt-v">0</strong></span>
+          <span class="block-tag" style="background:var(--bg); border:1px solid var(--border); color:var(--muted);">☐ En blanco (Falso): <strong id="re-cnt-f">40</strong></span>
+          <span class="timer" id="re-timer">25:00</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          <button class="btn btn-sm" onclick="window.print()">🖨️ Imprimir / PDF</button>
+          <button class="btn btn-sm" id="re-btn-regen" onclick="regenerateRandomExam()">🎲 Otro aleatorio</button>
+          <button class="btn btn-sm" onclick="backToRandomExamSetup()">⚙️ Config</button>
+          <button class="btn btn-ok btn-sm" id="re-btn-submit-top" onclick="finishRandomExam()">✅ Entregar y Corregir</button>
+        </div>
+      </div>
+
+      <div class="re-paper-header">
+        <div class="re-paper-title">Modelado Numérico de Sistemas Sólidos y Fluidos · Examen Aleatorio</div>
+        <div class="re-paper-meta" id="re-paper-meta"></div>
+        <div class="re-paper-instr" id="re-paper-instr"></div>
+      </div>
+
+      <div id="re-filter-bar" class="re-result-filter no-print" style="display:none;">
+        <button class="btn btn-sm btn-primary" id="re-flt-all" onclick="filterRandomExamSheet('all')">Ver todas</button>
+        <button class="btn btn-sm btn-err" id="re-flt-wrong" onclick="filterRandomExamSheet('wrong')">Solo fallos</button>
+        <button class="btn btn-sm btn-ok" id="re-flt-ok" onclick="filterRandomExamSheet('ok')">Solo aciertos</button>
+        <button class="btn btn-sm" onclick="toggleAllRandomExplanations()">📖 Expandir/plegar explicaciones</button>
+      </div>
+
+      <div id="re-list" class="re-list two-col"></div>
+
+      <div id="re-bottom-actions" class="re-bottom-bar no-print">
+        <div style="font-size:13.5px; color:var(--muted);">
+          Revisa tus casillas antes de entregar: las casillas sin marcar cuentan como <strong>FALSO</strong>.
+        </div>
+        <button class="btn btn-ok btn-lg" onclick="finishRandomExam()">✅ Entregar y Corregir Examen</button>
+      </div>
+    </div>
   </section>
 
   <!-- ===================== TAB 4: BANCO DE PREGUNTAS ===================== -->

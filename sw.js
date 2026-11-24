@@ -1,4 +1,4 @@
-const CACHE='mnssf-trainer-v3';
+const CACHE='mnssf-trainer-v4';
 const CORE=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./questions/manifest.json'];
 self.addEventListener('install',event=>{
   self.skipWaiting();

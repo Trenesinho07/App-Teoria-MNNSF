@@ -20,7 +20,7 @@ const TOPICS_META = [
 
 const STORAGE_KEY = "mnssf_trainer_v2_state";
 let state = loadState();
-state.stats ||= {}; state.doubts ||= {}; state.schedule ||= {}; state.extraQuestions ||= []; state.examHistory ||= [];
+state.stats ||= {}; state.doubts ||= {}; state.schedule ||= {}; state.extraQuestions ||= []; state.examHistory ||= []; state.randomExamSeen ||= [];
 let ALL_QUESTIONS = [...BASE_QUESTIONS, ...(state.extraQuestions || [])];
 let selectedTopics = new Set(TOPICS_META.map(t => t.id));
 
@@ -35,7 +35,7 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {}
-  return { stats: {}, doubts: {}, schedule: {}, extraQuestions: [], examHistory: [] };
+  return { stats: {}, doubts: {}, schedule: {}, extraQuestions: [], examHistory: [], randomExamSeen: [] };
 }
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("No se pudo guardar el progreso local", e); }
@@ -70,12 +70,13 @@ function getQStatus(id) {
 
 function switchTab(tab) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === tab);
+  });
   document.getElementById("view-" + tab).classList.add("active");
-  const idxMap = { config: 0, practice: 1, exam: 2, bank: 3, cheatsheet: 4, data: 5 };
-  document.querySelectorAll(".tab-btn")[idxMap[tab]].classList.add("active");
   if (tab === "config") renderConfig();
   if (tab === "bank") renderBank();
+  if (tab === "randomexam") updateRandomExamAvailability();
 }
 
 // ===================== CONFIGURADOR =====================
@@ -357,10 +358,11 @@ async function launchExam() {
   try { await loadTopics(ids); } catch(e) { showLoadError(e); return; }
   let pool = [];
   if (src === "official") pool = ALL_QUESTIONS.filter(q => q.isExam);
+  else if (src === "nonOfficial") pool = pickBalancedPool(ALL_QUESTIONS.filter(q => !q.isExam), count);
   else if (src === "fem") pool = ALL_QUESTIONS.filter(q => q.block === "FEM");
   else if (src === "cfd") pool = ALL_QUESTIONS.filter(q => q.block === "CFD");
   else if (src === "selected") pool = ALL_QUESTIONS.filter(q => selectedTopics.has(q.topic));
-  else { const fem = shuffleArray(ALL_QUESTIONS.filter(q => q.block === "FEM")); const cfd = shuffleArray(ALL_QUESTIONS.filter(q => q.block === "CFD")); const half = Math.floor(count / 2); pool = [...fem.slice(0, half), ...cfd.slice(0, count-half)]; }
+  else pool = pickBalancedPool(ALL_QUESTIONS, count);
   if (!pool.length) { alert("No hay preguntas en la selección elegida."); return; }
   eList = shuffleArray([...pool]).slice(0, Math.min(count, pool.length)); eIdx = 0; eAnswers = {}; eSeconds = mins * 60;
   document.getElementById("exam-setup").style.display = "none"; document.getElementById("exam-result").style.display = "none"; document.getElementById("exam-active").style.display = "block"; document.getElementById("e-total").textContent = eList.length;
@@ -581,7 +583,7 @@ function exportProgress() {
 
 function resetProgress() {
   if (!confirm("¿Seguro que quieres borrar todas tus estadísticas, fallos y dudas?")) return;
-  state.stats = {}; state.doubts = {}; state.examHistory = [];
+  state.stats = {}; state.doubts = {}; state.schedule = {}; state.examHistory = []; state.randomExamSeen = [];
   saveState();
   renderConfig();
   alert("Progreso reiniciado.");
@@ -636,4 +638,490 @@ populateBankTopicSelect();
 loadQuestionBank().catch(showLoadError);
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(console.warn));
+}
+
+
+// ===================== EXAMEN ALEATORIO (HOJA COMPLETA TIPO PAPEL) =====================
+let reList = [];
+let reChecked = {};   // q.id -> true (marcado como Verdadero); ausente/false = en blanco (Falso)
+let reFlagged = {};   // q.id -> true (marcado para revisar)
+let reGraded = false;
+let reTimer = null;
+let reSeconds = 0;
+let reUnlimited = false;
+let reElapsed = 0;
+let reBlindMode = true;
+let reCurrentFilter = "all";
+let reLastWrong = [];
+
+function pickBalancedPool(candidates, count) {
+  const fem = shuffleArray(candidates.filter(q => q.block === "FEM"));
+  const cfd = shuffleArray(candidates.filter(q => q.block === "CFD"));
+  const target = Math.min(count, candidates.length);
+  if (!fem.length || !cfd.length) {
+    return shuffleArray([...candidates]).slice(0, target);
+  }
+  const half = Math.floor(target / 2);
+  let takeFem = Math.min(half, fem.length);
+  let takeCfd = Math.min(target - takeFem, cfd.length);
+  // Si faltan preguntas en CFD, completamos con FEM restante
+  if (takeFem + takeCfd < target) {
+    takeFem = Math.min(fem.length, target - takeCfd);
+  }
+  return shuffleArray([...fem.slice(0, takeFem), ...cfd.slice(0, takeCfd)]);
+}
+
+function openRandomExamFromConfig() {
+  switchTab("randomexam");
+  document.getElementById("re-source").value = "selected";
+  updateRandomExamAvailability();
+}
+
+function setReNum(n) {
+  document.getElementById("re-num").value = n;
+  syncRandomExamMeta();
+}
+
+function syncRandomExamMeta() {
+  const n = Math.max(5, parseInt(document.getElementById("re-num").value, 10) || 40);
+  // Sugerir tiempo proporcional (~0.625 min/pregunta -> 25 min para 40) solo si no es 0
+  const minsEl = document.getElementById("re-mins");
+  if (minsEl && parseInt(minsEl.value, 10) !== 0) {
+    minsEl.value = Math.max(5, Math.round(n * 25 / 40));
+  }
+  updateRandomExamAvailability();
+}
+
+function updateRandomExamAvailability() {
+  const infoEl = document.getElementById("re-avail-info");
+  if (!infoEl) return;
+  const src = document.getElementById("re-source").value;
+  const noRepeat = document.getElementById("re-no-repeat").checked;
+  const seenSet = new Set(state.randomExamSeen || []);
+
+  let totalInSource = 0;
+  let topicsInSource = TOPIC_MANIFEST;
+  if (src === "fem") topicsInSource = TOPIC_MANIFEST.filter(t => t.block === "FEM");
+  else if (src === "cfd") topicsInSource = TOPIC_MANIFEST.filter(t => t.block === "CFD");
+  else if (src === "selected") topicsInSource = TOPIC_MANIFEST.filter(t => selectedTopics.has(t.id));
+
+  if (src === "nonOfficial") {
+    totalInSource = TOPIC_MANIFEST.reduce((s, t) => s + (t.count - (t.examCount || 0)), 0) + (state.extraQuestions || []).filter(q => !q.isExam).length;
+  } else if (src === "weak") {
+    const weakIds = new Set([...Object.keys(state.doubts || {}), ...Object.entries(state.stats || {}).filter(([,v]) => v.lastCorrect === false).map(([k]) => k)]);
+    totalInSource = weakIds.size;
+  } else if (src === "unseen") {
+    const totalAll = TOPIC_MANIFEST.reduce((s, t) => s + t.count, 0) + (state.extraQuestions || []).length;
+    const answeredCount = Object.keys(state.stats || {}).length;
+    totalInSource = Math.max(0, totalAll - answeredCount);
+    infoEl.innerHTML = `🆕 Aprox. <strong>${totalInSource}</strong> preguntas aún sin responder de ${totalAll} (si pides más, se completa con el resto).`;
+    return;
+  } else {
+    totalInSource = topicsInSource.reduce((s, t) => s + t.count, 0);
+    if (src === "all") totalInSource += (state.extraQuestions || []).length;
+  }
+
+  const usedInCycle = seenSet.size;
+  const approxLeft = noRepeat ? Math.max(0, totalInSource - usedInCycle) : totalInSource;
+  if (noRepeat) {
+    infoEl.innerHTML = `📦 Disponibles en este origen: <strong>${totalInSource}</strong> · Ya usadas en esta vuelta: <strong>${usedInCycle}</strong>` +
+      (usedInCycle >= totalInSource && totalInSource > 0 ? ` · <span style="color:var(--warn)">¡Vuelta completada! Se reiniciará automáticamente al generar.</span>` : ` · Restantes estimadas: <strong>${approxLeft}</strong>`);
+  } else {
+    infoEl.innerHTML = `📦 Pool activo: <strong>${totalInSource}</strong> preguntas (repetición permitida entre exámenes).`;
+  }
+}
+
+function resetRandomExamCycle() {
+  state.randomExamSeen = [];
+  saveState();
+  updateRandomExamAvailability();
+}
+
+function formatMMSS(sec) {
+  const m = String(Math.floor(Math.max(0, sec) / 60)).padStart(2, "0");
+  const s = String(Math.max(0, sec) % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+async function launchRandomExam() {
+  const src = document.getElementById("re-source").value;
+  const balance = document.getElementById("re-balance").value;
+  const count = Math.max(1, parseInt(document.getElementById("re-num").value, 10) || 40);
+  const mins = Math.max(0, parseInt(document.getElementById("re-mins").value, 10) || 0);
+  const noRepeat = document.getElementById("re-no-repeat").checked;
+  reBlindMode = document.getElementById("re-blind").checked;
+  const twoCol = document.getElementById("re-two-col").checked;
+
+  let ids = TOPIC_MANIFEST.map(t => t.id);
+  if (src === "fem") ids = TOPIC_MANIFEST.filter(t => t.block === "FEM").map(t => t.id);
+  else if (src === "cfd") ids = TOPIC_MANIFEST.filter(t => t.block === "CFD").map(t => t.id);
+  else if (src === "selected") {
+    ids = [...selectedTopics];
+    if (!ids.length) { alert("Selecciona al menos un tema en la pestaña Configurar."); return; }
+  }
+
+  showLoading("Generando examen aleatorio…");
+  try { await loadTopics(ids); } catch (e) { showLoadError(e); return; }
+
+  let basePool = [];
+  if (src === "nonOfficial") basePool = ALL_QUESTIONS.filter(q => !q.isExam);
+  else if (src === "all") basePool = [...ALL_QUESTIONS];
+  else if (src === "fem") basePool = ALL_QUESTIONS.filter(q => q.block === "FEM");
+  else if (src === "cfd") basePool = ALL_QUESTIONS.filter(q => q.block === "CFD");
+  else if (src === "selected") basePool = ALL_QUESTIONS.filter(q => selectedTopics.has(q.topic));
+  else if (src === "weak") {
+    const weakIds = new Set([...Object.keys(state.doubts || {}), ...Object.entries(state.stats || {}).filter(([,v]) => v.lastCorrect === false).map(([k]) => k)]);
+    basePool = ALL_QUESTIONS.filter(q => weakIds.has(q.id));
+  } else if (src === "unseen") {
+    const unseen = ALL_QUESTIONS.filter(q => !state.stats[q.id]);
+    const rest = ALL_QUESTIONS.filter(q => state.stats[q.id]);
+    const pickUnseen = balance === "balanced" ? pickBalancedPool(unseen, count) : shuffleArray([...unseen]).slice(0, count);
+    if (pickUnseen.length < count) {
+      const need = count - pickUnseen.length;
+      const pickRest = balance === "balanced" ? pickBalancedPool(rest, need) : shuffleArray([...rest]).slice(0, need);
+      basePool = shuffleArray([...pickUnseen, ...pickRest]);
+    } else {
+      basePool = pickUnseen;
+    }
+  }
+
+  if (!basePool.length) {
+    alert("No hay preguntas disponibles para ese origen. Prueba otro filtro.");
+    return;
+  }
+
+  // Aplicar filtro sin repetir en esta vuelta (excepto en unseen que ya prioriza nuevas)
+  let pool = basePool;
+  if (noRepeat && src !== "unseen") {
+    const seenSet = new Set(state.randomExamSeen || []);
+    const fresh = basePool.filter(q => !seenSet.has(q.id));
+    if (fresh.length === 0) {
+      // Todos los de este pool ya salieron: reiniciamos los IDs de este pool
+      const baseIds = new Set(basePool.map(q => q.id));
+      state.randomExamSeen = (state.randomExamSeen || []).filter(id => !baseIds.has(id));
+      saveState();
+      pool = basePool;
+    } else if (fresh.length < count && fresh.length < basePool.length) {
+      // Cogemos todas las frescas y completamos con las más antiguas si hacen falta
+      const pickedFresh = shuffleArray([...fresh]);
+      const older = shuffleArray(basePool.filter(q => seenSet.has(q.id)));
+      pool = [...pickedFresh, ...older.slice(0, count - pickedFresh.length)];
+    } else {
+      pool = fresh;
+    }
+  }
+
+  if (src === "unseen") {
+    reList = basePool.slice(0, Math.min(count, basePool.length));
+  } else if (balance === "balanced") {
+    reList = pickBalancedPool(pool, count);
+  } else {
+    reList = shuffleArray([...pool]).slice(0, Math.min(count, pool.length));
+  }
+
+  reChecked = {};
+  reFlagged = {};
+  reGraded = false;
+  reCurrentFilter = "all";
+  reLastWrong = [];
+
+  // UI setup
+  document.getElementById("re-setup").style.display = "none";
+  document.getElementById("re-result").style.display = "none";
+  document.getElementById("re-sheet-card").style.display = "block";
+  document.getElementById("re-filter-bar").style.display = "none";
+  document.getElementById("re-bottom-actions").style.display = "flex";
+  document.getElementById("re-btn-submit-top").style.display = "inline-flex";
+  document.getElementById("re-btn-regen").style.display = "inline-flex";
+
+  const listEl = document.getElementById("re-list");
+  listEl.className = twoCol ? "re-list two-col" : "re-list";
+
+  const femN = reList.filter(q => q.block === "FEM").length;
+  const cfdN = reList.filter(q => q.block === "CFD").length;
+  const ptsEach = (2 / reList.length).toFixed(reList.length === 40 ? 2 : 3).replace(".", ",");
+  const srcLabel = document.getElementById("re-source").selectedOptions[0].textContent;
+
+  document.getElementById("re-paper-meta").textContent =
+    `${reList.length} afirmaciones (${femN} FEM · ${cfdN} CFD) · Origen: ${srcLabel}`;
+  document.getElementById("re-paper-instr").innerHTML =
+    `<strong>Test [2 pts.]:</strong> Marque la casilla (☑) junto al número si la afirmación es <strong>VERDADERA</strong>; déjela en blanco (☐) si es <strong>FALSA</strong>. Cada acierto suma <strong>+${ptsEach} pts</strong> y cada fallo resta <strong>-${ptsEach} pts</strong>.`;
+
+  // Timer
+  clearInterval(reTimer);
+  reUnlimited = (mins === 0);
+  reSeconds = mins * 60;
+  reElapsed = 0;
+  updateRandomExamTimer();
+  reTimer = setInterval(() => {
+    if (reUnlimited) {
+      reElapsed++;
+      updateRandomExamTimer();
+    } else {
+      reSeconds--;
+      updateRandomExamTimer();
+      if (reSeconds <= 0) {
+        clearInterval(reTimer);
+        finishRandomExam();
+      }
+    }
+  }, 1000);
+
+  renderRandomExamSheet();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function updateRandomExamTimer() {
+  const el = document.getElementById("re-timer");
+  if (!el) return;
+  el.textContent = reUnlimited ? `⏱ ${formatMMSS(reElapsed)}` : formatMMSS(reSeconds);
+}
+
+function updateRandomExamCounters() {
+  const vCnt = Object.values(reChecked).filter(Boolean).length;
+  const fCnt = reList.length - vCnt;
+  document.getElementById("re-cnt-v").textContent = vCnt;
+  document.getElementById("re-cnt-f").textContent = fCnt;
+}
+
+function renderRandomExamSheet() {
+  const listEl = document.getElementById("re-list");
+  listEl.innerHTML = reList.map((q, idx) => {
+    const isChecked = !!reChecked[q.id];
+    const isFlagged = !!reFlagged[q.id];
+    const num = idx + 1;
+
+    if (!reGraded) {
+      return `
+        <div class="re-item ${isChecked ? "checked" : ""} ${isFlagged ? "flagged" : ""}" id="re-card-${q.id}">
+          <div class="re-row" onclick="toggleRandomExamAnswer('${q.id}')">
+            <div class="re-box" aria-checked="${isChecked}" role="checkbox">${isChecked ? "✓" : ""}</div>
+            <div class="re-q-body">
+              <span class="re-num-badge">${num}.</span> ${q.q}
+            </div>
+            <button type="button" class="re-flag-btn" title="Marcar para revisar" onclick="event.stopPropagation(); toggleRandomExamFlag('${q.id}')">🚩</button>
+          </div>
+          ${!reBlindMode ? `
+            <div class="re-item-badges">
+              <span class="block-tag ${q.block === "FEM" ? "tag-fem" : "tag-cfd"}">${q.topicName}</span>
+              ${q.isExam ? '<span class="block-tag tag-exam">📄 Modelo Oficial</span>' : ""}
+            </div>` : ""}
+        </div>
+      `;
+    }
+
+    // Modo corregido
+    const userAns = isChecked;
+    const isOk = (userAns === q.a);
+    if (reCurrentFilter === "wrong" && isOk) return "";
+    if (reCurrentFilter === "ok" && !isOk) return "";
+
+    return `
+      <div class="re-item ${isOk ? "graded-ok" : "graded-err"}" id="re-card-${q.id}">
+        <div class="re-row" style="cursor:default;">
+          <div class="re-box" style="background:${isOk ? "var(--ok)" : "var(--err)"}; border-color:${isOk ? "var(--ok)" : "var(--err)"};">
+            ${isOk ? "✓" : "✕"}
+          </div>
+          <div class="re-q-body">
+            <span class="re-num-badge">${num}.</span> ${q.q}
+          </div>
+        </div>
+        <div class="re-item-badges">
+          <span class="block-tag ${q.block === "FEM" ? "tag-fem" : "tag-cfd"}">${q.topicName}</span>
+          ${q.isExam ? '<span class="block-tag tag-exam">📄 Modelo Oficial</span>' : ""}
+          <span class="block-tag ${isOk ? "tag-ok" : "tag-err"}">
+            Marcaste: ${userAns ? "☑ Verdadero" : "☐ Falso"} · Solución: ${q.a ? "VERDADERO" : "FALSO"}
+          </span>
+        </div>
+        <button type="button" class="re-exp-toggle no-print" onclick="toggleSingleRandomExp('${q.id}')">
+          ${isOk ? "Ver explicación ▾" : "Ocultar / ver explicación ▾"}
+        </button>
+        <div class="re-exp ${isOk ? "collapsed" : ""}" id="re-exp-${q.id}">
+          <div class="fb-row">🎯 <strong>Trampa / Clave:</strong> ${q.trap}</div>
+          <div class="fb-row">📘 <strong>Concepto real:</strong> ${q.concept}</div>
+          <div class="fb-row" style="margin-bottom:0;">🧠 <strong>Regla rápida:</strong> ${q.anchor}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  updateRandomExamCounters();
+}
+
+function toggleRandomExamAnswer(id) {
+  if (reGraded) return;
+  reChecked[id] = !reChecked[id];
+  const card = document.getElementById("re-card-" + id);
+  if (card) {
+    card.classList.toggle("checked", !!reChecked[id]);
+    const box = card.querySelector(".re-box");
+    if (box) {
+      box.textContent = reChecked[id] ? "✓" : "";
+      box.setAttribute("aria-checked", String(!!reChecked[id]));
+    }
+  }
+  updateRandomExamCounters();
+}
+
+function toggleRandomExamFlag(id) {
+  if (reGraded) return;
+  reFlagged[id] = !reFlagged[id];
+  const card = document.getElementById("re-card-" + id);
+  if (card) card.classList.toggle("flagged", !!reFlagged[id]);
+}
+
+function toggleSingleRandomExp(id) {
+  const el = document.getElementById("re-exp-" + id);
+  if (el) el.classList.toggle("collapsed");
+}
+
+function toggleAllRandomExplanations() {
+  const exps = [...document.querySelectorAll("#re-list .re-exp")];
+  const anyCollapsed = exps.some(el => el.classList.contains("collapsed"));
+  exps.forEach(el => el.classList.toggle("collapsed", !anyCollapsed));
+}
+
+function filterRandomExamSheet(mode) {
+  reCurrentFilter = mode;
+  ["all", "wrong", "ok"].forEach(m => {
+    const b = document.getElementById("re-flt-" + m);
+    if (b) b.style.outline = (m === mode) ? "2px solid #fff" : "none";
+  });
+  renderRandomExamSheet();
+}
+
+function regenerateRandomExam() {
+  const marked = Object.values(reChecked).filter(Boolean).length;
+  if (!reGraded && marked > 0) {
+    if (!confirm(`Llevas ${marked} casillas marcadas. ¿Seguro que quieres generar otro examen aleatorio nuevo?`)) return;
+  }
+  launchRandomExam();
+}
+
+function backToRandomExamSetup() {
+  const marked = Object.values(reChecked).filter(Boolean).length;
+  if (!reGraded && marked > 0) {
+    if (!confirm("¿Volver a la configuración? Se perderán las casillas marcadas de este examen.")) return;
+  }
+  clearInterval(reTimer);
+  document.getElementById("re-sheet-card").style.display = "none";
+  document.getElementById("re-result").style.display = "none";
+  document.getElementById("re-setup").style.display = "block";
+  updateRandomExamAvailability();
+}
+
+function finishRandomExam() {
+  if (reGraded) return;
+  const vCnt = Object.values(reChecked).filter(Boolean).length;
+  if (vCnt === 0 && !confirm("No has marcado ninguna casilla como Verdadera (todas contarían como Falso). ¿Seguro que quieres entregar ya?")) {
+    return;
+  }
+  clearInterval(reTimer);
+  reGraded = true;
+
+  let ok = 0, err = 0;
+  let femOk = 0, femTot = 0, cfdOk = 0, cfdTot = 0;
+  const byTopic = {};
+  const wrongItems = [];
+  const seenSet = new Set(state.randomExamSeen || []);
+
+  reList.forEach(q => {
+    const userAns = !!reChecked[q.id];
+    const isOk = (userAns === q.a);
+    if (isOk) ok++; else { err++; wrongItems.push(q); }
+
+    if (q.block === "FEM") { femTot++; if (isOk) femOk++; }
+    else { cfdTot++; if (isOk) cfdOk++; }
+
+    if (!byTopic[q.topic]) byTopic[q.topic] = { name: q.topicName, block: q.block, ok: 0, tot: 0 };
+    byTopic[q.topic].tot++;
+    if (isOk) byTopic[q.topic].ok++;
+
+    // Actualizar estadísticas, SRS y registro de vuelta
+    const prev = state.stats[q.id] || { right: 0, wrong: 0 };
+    if (isOk) prev.right++; else prev.wrong++;
+    prev.lastCorrect = isOk;
+    state.stats[q.id] = prev;
+
+    const old = state.schedule[q.id] || { repetitions: 0, interval: 0, ease: 2.5 };
+    if (!isOk) {
+      old.repetitions = 0; old.interval = 10;
+    } else {
+      old.repetitions++;
+      old.interval = old.repetitions === 1 ? 4320 : Math.round(Math.max(4320, old.interval * old.ease));
+    }
+    old.due = Date.now() + old.interval * 60000;
+    state.schedule[q.id] = old;
+
+    seenSet.add(q.id);
+  });
+
+  state.randomExamSeen = [...seenSet];
+  reLastWrong = wrongItems;
+
+  const net = ok - err;
+  const score2 = Math.max(0, (net / reList.length) * 2);
+  const score10 = Math.max(0, (net / reList.length) * 10);
+  state.examHistory.push({ date: new Date().toISOString(), ok, err, total: reList.length, score2, mode: "randomSheet" });
+  saveState();
+
+  const topicRows = Object.entries(byTopic)
+    .sort((a, b) => (a[1].ok / a[1].tot) - (b[1].ok / b[1].tot))
+    .map(([tid, d]) => {
+      const p = Math.round((d.ok / d.tot) * 100);
+      const col = p >= 75 ? "var(--ok)" : p >= 50 ? "var(--warn)" : "var(--err)";
+      return `<span class="re-topic-pill" style="border-color:${col};">${tid}: <strong style="color:${col}">${d.ok}/${d.tot}</strong> (${p}%)</span>`;
+    }).join("");
+
+  const resEl = document.getElementById("re-result");
+  resEl.style.display = "block";
+  resEl.innerHTML = `
+    <div class="card-title">📊 Corrección del Examen Aleatorio (${reList.length} preguntas)</div>
+    <p class="subtitle">Todas las preguntas se han registrado en tu progreso y repetición espaciada. Debajo tienes la hoja corregida con los fallos desplegados.</p>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Nota Examen (/2,00)</div>
+        <div class="stat-val" style="color:${score2 >= 1 ? "var(--ok)" : "var(--err)"}">${score2.toFixed(2)}</div>
+        <div class="stat-sub">Equiv: ${score10.toFixed(2)} / 10</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Aciertos / Fallos</div>
+        <div class="stat-val"><span style="color:var(--ok)">${ok}</span> / <span style="color:var(--err)">${err}</span></div>
+        <div class="stat-sub">Neto: ${net} de ${reList.length}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Bloque FEM</div>
+        <div class="stat-val" style="color:#c4b5fd">${femTot ? Math.round(femOk / femTot * 100) + "%" : "—"}</div>
+        <div class="stat-sub">${femOk}/${femTot} aciertos</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Bloque CFD</div>
+        <div class="stat-val" style="color:#67e8f9">${cfdTot ? Math.round(cfdOk / cfdTot * 100) + "%" : "—"}</div>
+        <div class="stat-sub">${cfdOk}/${cfdTot} aciertos</div>
+      </div>
+    </div>
+    <div style="font-size:12.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.3px;">Desglose por tema (de peor a mejor)</div>
+    <div class="re-topic-breakdown">${topicRows}</div>
+    <div class="no-print" style="display:flex; flex-wrap:wrap; gap:10px;">
+      <button class="btn btn-primary" onclick="launchRandomExam()">🎲 Otro Examen Aleatorio nuevo</button>
+      ${wrongItems.length ? `<button class="btn btn-err" onclick="practiceRandomExamWrong()">🔥 Practicar los ${wrongItems.length} fallos</button>` : '<span class="block-tag tag-ok" style="align-self:center;">🏆 ¡Pleno absoluto! 0 fallos</span>'}
+      <button class="btn" onclick="backToRandomExamSetup()">⚙️ Cambiar opciones</button>
+    </div>
+  `;
+
+  document.getElementById("re-bottom-actions").style.display = "none";
+  document.getElementById("re-btn-submit-top").style.display = "none";
+  document.getElementById("re-filter-bar").style.display = "flex";
+  document.getElementById("re-flt-all").textContent = `Ver todas (${reList.length})`;
+  document.getElementById("re-flt-wrong").textContent = `Solo fallos (${err})`;
+  document.getElementById("re-flt-ok").textContent = `Solo aciertos (${ok})`;
+
+  renderRandomExamSheet();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function practiceRandomExamWrong() {
+  if (reLastWrong.length) {
+    startPractice(shuffleArray([...reLastWrong]));
+  }
 }
